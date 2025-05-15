@@ -39,6 +39,7 @@ function compress(req, res, input) {
 function _sendResponse(err, output, info, format, req, res) {
   if (err || !info) return redirect(req, res);
 
+  res.setHeader('cache-control', 'public, max-age=604800, stale-while-revalidate=86400')
   res.setHeader('content-type', 'image/' + format);
   res.setHeader('content-length', info.size);
   res.setHeader('x-original-size', req.params.originSize);
