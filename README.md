@@ -16,6 +16,7 @@ and user's IP address through to the origin host.
 - Change on codes, Including how it handle buffers
 - Added animation support (Which is CPU intensive. Disable by setting `NO_ANIMATE` in env variable)
 - Fixed CORS problems
+- Fix UX
 
 ## Deployment Requirement
 - Atleast [NodeJS](https://nodejs.org) >= 14 is installed.
