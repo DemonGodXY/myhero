@@ -9,7 +9,6 @@ const pick = require("lodash").pick;
 const shouldCompress = require("./shouldCompress");
 const redirect = require("./redirect");
 const compress = require("./compress");
-const copyHeaders = require("./copyHeaders");
 
 async function proxy(req, res) {
   /*
@@ -55,7 +54,6 @@ function _onRequestResponse(origin, req, res) {
   if (origin.statusCode >= 300 && origin.headers.location)
     return redirect(req, res);
 
-  copyHeaders(origin, res);
   res.setHeader("content-encoding", "identity");
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
