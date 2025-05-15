@@ -47,12 +47,16 @@ function _onRequestError(req, res, err) {
 }
 
 function _onRequestResponse(origin, req, res) {
-  if (origin.statusCode >= 400)
+  if (origin.statusCode >= 400) {
+    origin.body.destroy()
     return redirect(req, res);
+  }
 
   // handle redirects
-  if (origin.statusCode >= 300 && origin.headers.location)
+  if (origin.statusCode >= 300 && origin.headers.location) {
+    origin.body.destroy()
     return redirect(req, res);
+  }
 
   res.setHeader("content-encoding", "identity");
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -69,19 +73,8 @@ function _onRequestResponse(origin, req, res) {
      */
     return compress(req, res, origin);
   } else {
-    /*
-     * Downloading then uploading the buffer to the client is not a good idea though,
-     * It would better if you pipe the incomming buffer to client directly.
-     */
-
-    res.setHeader("x-proxy-bypass", 1);
-
-    for (const headerName of ["accept-ranges", "content-type", "content-length", "content-range"]) {
-      if (headerName in origin.headers)
-        res.setHeader(headerName, origin.headers[headerName]);
-    }
-
-    return origin.body.pipe(res);
+    origin.body.destroy()
+    return redirect(req, res);
   }
 }
 
