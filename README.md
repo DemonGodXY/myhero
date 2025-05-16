@@ -18,6 +18,8 @@ and user's IP address through to the origin host.
 - Fixed CORS problems
 - Fix UX
 
+You may also check my rewrite: [go-bwhero](https://github.com/Yonle/go-bwhero)
+
 ## Deployment Requirement
 - Atleast [NodeJS](https://nodejs.org) >= 14 is installed.
 - [libvips](https://github.com/libvips/libvips) >= 8.14.2
