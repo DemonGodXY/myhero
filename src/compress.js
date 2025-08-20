@@ -11,10 +11,11 @@ sharp.cache(false);
 function compress(req, res, input) {
   const format = req.params.webp ? 'webp' : 'jpeg';
   
-  // Set headers immediately (without size info)
+  // Set headers immediately and announce trailers
   res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
   res.setHeader('Content-Type', `image/${format}`);
   res.setHeader('X-Original-Size', req.params.originSize);
+  res.setHeader('Trailer', 'X-Bytes-Saved'); // Announce the trailer
   
   // Create transform stream for compression
   const transform = sharpStream()
@@ -40,8 +41,8 @@ function compress(req, res, input) {
       }
     },
     flush(callback) {
-      // Set final size headers and end response
-      res.setHeader('X-Bytes-Saved', req.params.originSize - totalSize);
+      // Add trailer instead of header
+      res.addTrailers({ 'X-Bytes-Saved': req.params.originSize - totalSize });
       res.end();
       callback();
     }
