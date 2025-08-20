@@ -1,7 +1,7 @@
 "use strict";
 const sharp = require('sharp');
 const redirect = require('./redirect');
-const { Writable } = require('stream');
+const { Transform } = require('stream');
 const sharpStream = () => sharp({ 
   animated: !process.env.NO_ANIMATE, 
   unlimited: true 
@@ -10,6 +10,11 @@ sharp.cache(false);
 
 function compress(req, res, input) {
   const format = req.params.webp ? 'webp' : 'jpeg';
+  
+  // Set headers immediately (without size info)
+  res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
+  res.setHeader('Content-Type', `image/${format}`);
+  res.setHeader('X-Original-Size', req.params.originSize);
   
   // Create transform stream for compression
   const transform = sharpStream()
@@ -20,39 +25,44 @@ function compress(req, res, input) {
       optimizeScans: true
     });
 
-  // Buffer to collect compressed data
-  const chunks = [];
-  const bufferStream = new Writable({
-    write(chunk, encoding, callback) {
-      chunks.push(chunk);
+  // Create chunk sender transform
+  let totalSize = 0;
+  const chunkSender = new Transform({
+    transform(chunk, encoding, callback) {
+      totalSize += chunk.length;
+      
+      // Send chunk immediately
+      if (!res.write(chunk)) {
+        // Handle backpressure
+        res.once('drain', () => callback());
+      } else {
+        callback();
+      }
+    },
+    flush(callback) {
+      // Set final size headers and end response
+      res.setHeader('X-Bytes-Saved', req.params.originSize - totalSize);
+      res.end();
       callback();
     }
   });
 
-  // Handle stream pipeline
+  // Handle stream pipeline with error handling
   input.body
-    .on('error', () => req.socket.destroy())
+    .on('error', (err) => {
+      console.error('Input error:', err);
+      req.socket.destroy();
+    })
     .pipe(transform)
-    .on('error', () => redirect(req, res))
-    .pipe(bufferStream)
-    .on('error', () => redirect(req, res));
-
-  // When compression is complete
-  bufferStream.on('finish', () => {
-    const compressedData = Buffer.concat(chunks);
-    const compressedSize = compressedData.length;
-    const originalSize = parseInt(req.params.originSize) || 0;
-    
-    // Set all headers before sending response
-    res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
-    res.setHeader('Content-Type', `image/${format}`);
-    res.setHeader('Content-Length', compressedSize);
-    res.setHeader('X-Original-Size', originalSize);
-    res.setHeader('X-Bytes-Saved', Math.max(0, originalSize - compressedSize));
-    
-    // Send buffered response
-    res.status(200).end(compressedData);
-  });
+    .on('error', (err) => {
+      console.error('Transform error:', err);
+      redirect(req, res);
+    })
+    .pipe(chunkSender)
+    .on('error', (err) => {
+      console.error('Chunk sender error:', err);
+      redirect(req, res);
+    });
 }
 
 module.exports = compress;
