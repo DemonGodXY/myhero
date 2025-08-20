@@ -1,23 +1,17 @@
 "use strict";
-/*
-* compress.js
-* A module that compress a image.
-* compress(httpRequest, httpResponse, ReadableStream);
-*/
-const sharp = require('sharp')
-const redirect = require('./redirect')
-const { PassThrough, Transform } = require('stream');
-const sharpStream = _ => sharp({ animated: !process.env.NO_ANIMATE, unlimited: true });
-sharp.cache(false)
+const sharp = require('sharp');
+const redirect = require('./redirect');
+const { Writable } = require('stream');
+const sharpStream = () => sharp({ 
+  animated: !process.env.NO_ANIMATE, 
+  unlimited: true 
+});
+sharp.cache(false);
 
 function compress(req, res, input) {
-  const format = req.params.webp ? 'webp' : 'jpeg'
+  const format = req.params.webp ? 'webp' : 'jpeg';
   
-  // Set headers and announce trailers
-  res.setHeader('cache-control', 'public, max-age=604800, stale-while-revalidate=86400')
-  res.setHeader('content-type', 'image/' + format);
-  res.setHeader('Trailer', 'x-original-size, x-bytes-saved');
-
+  // Create transform stream for compression
   const transform = sharpStream()
     .grayscale(req.params.grayscale)
     .toFormat(format, {
@@ -26,33 +20,39 @@ function compress(req, res, input) {
       optimizeScans: true
     });
 
-  let totalSize = 0;
-  const passThrough = new PassThrough();
-  const counter = new Transform({
-    transform(chunk, encoding, callback) {
-      totalSize += chunk.length;
-      this.push(chunk);
+  // Buffer to collect compressed data
+  const chunks = [];
+  const bufferStream = new Writable({
+    write(chunk, encoding, callback) {
+      chunks.push(chunk);
       callback();
     }
   });
 
+  // Handle stream pipeline
   input.body
     .on('error', () => req.socket.destroy())
     .pipe(transform)
     .on('error', () => redirect(req, res))
-    .pipe(counter)
-    .pipe(passThrough)
+    .pipe(bufferStream)
     .on('error', () => redirect(req, res));
 
-  // Set trailers when stream ends
-  passThrough.on('end', () => {
-    res.addTrailers({
-      'x-original-size': req.params.originSize,
-      'x-bytes-saved': req.params.originSize - totalSize
-    });
+  // When compression is complete
+  bufferStream.on('finish', () => {
+    const compressedData = Buffer.concat(chunks);
+    const compressedSize = compressedData.length;
+    const originalSize = parseInt(req.params.originSize) || 0;
+    
+    // Set all headers before sending response
+    res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
+    res.setHeader('Content-Type', `image/${format}`);
+    res.setHeader('Content-Length', compressedSize);
+    res.setHeader('X-Original-Size', originalSize);
+    res.setHeader('X-Bytes-Saved', Math.max(0, originalSize - compressedSize));
+    
+    // Send buffered response
+    res.status(200).end(compressedData);
   });
-
-  passThrough.pipe(res);
 }
 
 module.exports = compress;
